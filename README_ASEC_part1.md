@@ -102,7 +102,7 @@ mv output.itp conf_${Resname}.itp
 
     - The first file in `ITP_FILES` must be `conf_${Resname}.itp`.
     - The merged file is always written as `output.itp` then renamed. [file:313]
-7. **Merge ASEC residues and topology** using `merge_3c.py`: [file:311][file:312]
+7. **Merge solute residues and topology** using `merge_3c.py`: [file:311][file:312]
 
 ```bash
 cp ${Project}_avg_dist.gro NA_avg_dist.gro
@@ -112,7 +112,7 @@ mv NA_avg_dist_merged.gro ${Project}_avg_dist.gro
 ```
 
 After this step, solute residues (defined in `Infos.dat` via the `ASEC` line) are merged into a single UNK residue in the GRO and topology. [file:312]
-8. **Create index groups** for ASEC restraints and temperature coupling: [file:311]
+8. **Create index groups** for restraints and temperature coupling: [file:311]
     - First count default groups:
 
 ```bash
@@ -134,7 +134,7 @@ EOF
 ```
 
 This yields groups:
-        - `${Fixed}_posres` – atoms of the ASEC complex to restrain.
+        - `${Fixed}_posres` – atoms of the solute complex to restrain.
         - `non-${Solvent}` – everything except solvent, used in `tc-grps` in `.mdp`. [file:311]
     - The script verifies that both groups exist in `index.ndx`. [file:311]
 9. **Generate position restraints**: [file:311]
@@ -207,7 +207,7 @@ Given:
 
 - An averaged snapshot `NA_avg_dist.gro` and
 - Its topology `topol.top` and
-- A definition of the ASEC complex in `Infos.dat`,
+- A definition of the solute complex (ASEC keyword in `Infos.dat`),
 
 this script:
 
@@ -265,7 +265,7 @@ coords  = line[20:].rstrip("\n")
 2. **Identify base UNK residue**: [file:312]
     - Find all residue IDs with `resname == "UNK"`, take the smallest `resnr` as `unk_resid`. [file:312]
     - This residue is the base into which others will be merged (`base_key = (unk_resid, "UNK")`). [file:312]
-3. **Build ASEC selection**: [file:312]
+3. **Build solute selection**: [file:312]
     - For each `(resnr, resname)`:
         - Select if `resname` is in `resnames_from_infos` or `resnr` is in `resids_from_infos`.
     - Ensure `base_key` is always included. [file:312]
@@ -371,6 +371,20 @@ Outputs:
 - `npt_asec.tpr`, `npt_asec.xtc`, `npt_asec.edr`, `npt_asec.gro` and associated log/trajectory files. [file:310]
 
 You can then use this ASEC trajectory for downstream QM/MM or field calculations centered on the merged UNK complex.
+
+## 5. Typical workflow
+
+1. After average snapshot was generated using `extract_average.sh`, i.e. `<Project>_avg_dist.gro` is in the current directory.
+2. Add the `ASEC` and `ITP` lines in `Infos.dat`
+3. Check that all .itp files to be merged are located in the current directory. 
+4. Run:
+
+```bash
+bash asec_gensnapshots.sh
+```
+
+5. Go to `ASEC_part2.md` when MD run will finish.  
+
 
 ```
 <span style="display:none">[^1][^2][^3][^4]</span>
