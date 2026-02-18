@@ -1,4 +1,3 @@
-```markdown
 # Distance-Based Snapshot Extraction Tools
 
 This mini-toolkit identifies a frame in a GROMACS trajectory where a selected distance is closest to its time-averaged value over a specified time window, and then extracts the corresponding structure.
