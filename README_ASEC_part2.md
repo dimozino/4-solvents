@@ -3,17 +3,17 @@
 This toolkit processes ASEC MD trajectories to:
 
 - Extract evenly spaced snapshots.
-- Build equal-sized ASEC environments around the UNK complex.
-- Assign point charges and merge frames into a single `.pc` file.
-- Extract the QM subsystem geometry for subsequent QM/MM or pure QM runs.
+- Build equal-sized ASEC environments around the solute complex (named resname UNK).
+- Assign point charges and merge frames into a single `.pc` file (ORCA file with external charges).
+- Extract the QM subsystem geometry for subsequent QM/MM runs.
 
 Scripts:
 
-- `asec_extract.sh` – main driver: frame extraction, ASEC neighbor selection, charge mapping, QM part extraction. [file:316]
-- `asec_extract.py` – selects full solvent/residue shells around ASEC atoms and equalizes atom counts across frames. [file:315]
-- `asec_merge.py` – converts neighbor PDBs plus residue charge tables into a merged point-charge file. [file:318]
+- `asec_extract.sh` – main driver: frame extraction, shell selection for ASEC environment, charge mapping, QM part extraction. [file:316]
+- `asec_extract.py` – selects solvent shells around solute atoms and equalizes atom counts across frames. [file:315]
+- `asec_merge.py` – converts neighbor PDBs plus residue charge tables into a merged point-charge file (for ORCA). [file:318]
 - `qmpart_extract.py` – extracts the UNK residue into a QM geometry file (`qmpart.xyz`). [file:317]
-- `equalize_asecs.sh` – batch processing over multiple systems listed in `folders.txt`, including equalization and merging. [file:319]
+- `equalize_asecs.sh` – batch processing over multiple systems listed in `folders.txt`, including equalization of ASEC point charges. [file:319]
 
 ---
 
@@ -25,8 +25,8 @@ Runs the full ASEC extraction pipeline for a **single** system with an existing 
 
 1. Analyzes `npt_asec.xtc` to determine a time step for ~100 evenly spaced frames. [file:316]
 2. Extracts snapshots as separate PDBs (`snapshots/frame_*.pdb`). [file:316]
-3. Renames the first NUMA residue to UNK (via an external helper script). [file:316]
-4. Uses `asec_extract.py` to build equal‑size neighbor shells around the ASEC group. [file:316][file:315]
+3. Renames the first NUMA residue to UNK (via an external helper script, required since gromacs has a bug in the naming of merged residues). [file:316]
+4. Uses `asec_extract.py` to build equal‑size neighbor shells around the solute group. [file:316][file:315]
 5. Uses `asec_merge.py` + charge tables to generate a merged point‑charge file. [file:316][file:318]
 6. Uses `qmpart_extract.py` to extract the QM subsystem geometry. [file:316][file:317]
 
@@ -35,8 +35,8 @@ Runs the full ASEC extraction pipeline for a **single** system with an existing 
 In the working directory: [file:316]
 
 - `npt_asec.xtc`, `npt_asec.tpr` – ASEC trajectory and corresponding TPR.
-- `index.ndx` – must contain ASEC group named `UNK` (used downstream by `asec_extract.py`). [file:315]
-- `Infos.dat` – must contain a `Cutoff` line, e.g. `Cutoff 5.0` (Å), used by `asec_extract.py`. [file:315]
+- `index.ndx` – must contain solute group named `UNK` (used downstream by `asec_extract.py`). [file:315]
+- `Infos.dat` – must contain a `Cutoff` line, e.g. `Cutoff 20.0` (Å), used by `asec_extract.py`. [file:315]
 - Access to scripts and data in `sd=/home/ibsbnicigt/nikolaev_d/script_library/4-solvents/`:
   - `rename_first_NUMA_to_UNK.py`
   - `asec_extract.py`
@@ -89,6 +89,7 @@ rm neighbors_eq_fullres/frame_0.pdb
 ```
 
 This produces `neighbors_eq_fullres/frame_*.pdb`, each containing the same number of atoms (neighbors within `Cutoff` Å).
+
 6. **Charge mapping and point‑charge file**: [file:316][file:318]
 
 ```bash
@@ -116,7 +117,7 @@ Produces `qmpart.xyz` from `snapshots/frame_0.pdb`.
 
 From a set of ASEC trajectory snapshots (`snapshots/frame_*.pdb`):
 
-- Identify all residues within `Cutoff` Å of the ASEC group (UNK) in each frame. [file:315]
+- Identify all residues within `Cutoff` Å of the solute group (UNK) in each frame. [file:315]
 - Enforce that **all frames have the same number of neighbor atoms**, by selecting the nearest full residues up to a global target count. [file:315]
 - Write trimmed neighbor PDBs to `neighbors_eq_fullres/frame_*.pdb`. [file:315]
 
@@ -126,7 +127,7 @@ From a set of ASEC trajectory snapshots (`snapshots/frame_*.pdb`):
 In the working directory: [file:315]
 
 - `index.ndx` – must contain a group named `UNK` (ASEC atoms). [file:315]
-- `Infos.dat` – must include a `Cutoff` line, e.g. `Cutoff 5.0`. [file:315]
+- `Infos.dat` – must include a `Cutoff` line, e.g. `Cutoff 20.0`. [file:315]
 - Snapshot files: `snapshots/frame_*.pdb` (from `asec_extract.sh`). [file:315]
 
 
@@ -139,8 +140,8 @@ In the working directory: [file:315]
 3. **Parse each PDB** (`ATOM`/`HETATM` records) into per‑atom dicts (serial, name, resname, chain, resid, xyz). [file:315]
 4. **Map ASEC coordinates** by matching `serial` with ASEC indices. [file:315]
 5. **Group by residue** (`(chain, resid, resname)`). [file:315]
-6. For each residue that is not purely ASEC:
-    - Compute minimal squared distance from any atom in the residue (excluding ASEC atoms) to any ASEC atom. [file:315]
+6. For each residue that is not purely solute:
+    - Compute minimal squared distance from any atom in the residue (excluding solute UNK atoms) to any UNK atom. [file:315]
     - If $\text{min} d^2 \le \text{Cutoff}^2$, mark residue as neighbor and store `mindist2`. [file:315]
 7. For each frame:
     - Sort neighbor residues by `mindist2`.
