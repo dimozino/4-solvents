@@ -158,7 +158,7 @@ def read_par(par_path):
         if line.startswith("NONBONDED"):
             section = "NONBONDED"
             # skip header line with CUTNB, etc.
-            i += 1
+            i += 2
             continue
         if line.startswith("END"):
             break
