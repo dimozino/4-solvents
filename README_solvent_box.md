@@ -7,7 +7,7 @@ Scripts:
 - `solvent.sh` – main driver: builds solvated, ionized box and prepares MD inputs.
 - `swap_ion_solvent.py` – Python helper: moves ions from bulk into the solute environment.
 - `solvent_run.sh` – runs NVT/NPT equilibration and basic analysis (RMSD, density).
-
+- `check_md_convergence.sh` - analyze rmsd_npt.xvg density_npt.xvg to check md convergece.
 
 ## 1. Requirements
 
@@ -241,6 +241,150 @@ Outputs:
 
 - `nvt.tpr`, `nvt.xtc`, `nvt.edr`, `nvt.gro`, `rmsd_nvt.xvg`, `energy_nvt.xvg`
 - `npt.tpr`, `npt.xtc`, `npt.edr`, `npt.gro`, `rmsd_npt.xvg`, `density_npt.xvg`[^1]
+
+### 4.4 `check_md_convergence.sh`
+
+This script evaluates basic NPT MD convergence using two standard analysis outputs:
+
+- `rmsd_npt.xvg` – RMSD vs time from `gmx rms`.
+- `density_npt.xvg` – density vs time from `gmx energy` (typically the NPT run).
+
+It reads the XVG files, analyzes the last part of each time series, and reports whether RMSD and density appear stable (low fluctuations, small drift).
+
+#### 1. Files and inputs
+
+Expected inputs in the current directory:
+
+- `rmsd_npt.xvg`
+Generated with something like:
+
+```bash
+gmx rms -s npt.tpr -f npt.xtc -o rmsd_npt.xvg -tu ps
+```
+
+- `density_npt.xvg`
+Generated with:
+
+```bash
+gmx energy -f npt.edr -o density_npt.xvg
+# choose "Density" interactively
+```
+
+
+You can also pass custom filenames as arguments (see Usage).
+
+The script assumes XVG format:
+
+- Comment / metadata lines starting with `#` or `@`.
+- Data lines with at least two columns:
+column 0 – time (ps), column 1 – observable (RMSD or density).
+
+
+#### 2. Usage
+
+From the directory containing your XVG files:
+
+```bash
+bash check_convergence.sh
+```
+
+or explicitly:
+
+```bash
+bash check_convergence.sh rmsd_npt.xvg density_npt.xvg
+```
+
+Exit status:
+
+- `0` – both RMSD and density judged converged.
+- `1` – at least one of them not converged or input error.
+
+You can use this in job scripts, e.g.:
+
+```bash
+if bash check_convergence.sh; then
+    echo "NPT appears converged; proceed to production."
+else
+    echo "Convergence not reached; consider extending NPT."
+fi
+```
+
+
+#### 3. Method
+
+The script embeds a Python snippet that:
+
+1. **Parses XVG**
+    - Skips lines starting with `#` or `@`.
+    - Reads time from column 0, value from column 1 (configurable per call).
+2. **Defines a tail window**
+    - Uses the last 20% of frames (`tail_frac = 0.20`) as the “convergence tail”.
+3. **Computes statistics on the tail**
+
+For the selected tail region it calculates:
+    - Mean: $\bar{x}$.
+    - Standard deviation: $\sigma = \sqrt{\frac{1}{N}\sum (x_i-\bar{x})^2}$.
+    - Slope (simple drift estimate):
+$\text{slope} = \frac{x_{\text{last}} - x_{\text{first}}}{t_{\text{last}} - t_{\text{first}}}$.
+4. **Applies convergence criteria**
+
+Defaults (tune inside the script):
+    - Tail fraction: `tail_frac = 0.20` (last 20%).
+    - RMSD:
+        - `rmsd_std_th = 0.05` (e.g. 0.05 nm).
+        - `rmsd_slope_th = 1e-4` (nm per ps).
+    - Density:
+        - `dens_std_th = 5.0` (typical units from `density_npt.xvg`).
+        - `dens_slope_th = 1e-2` (units per ps).
+
+A series is marked **converged** if:
+    - `std <= std_threshold` **and**
+    - `|slope| <= slope_threshold`.
+
+The script checks RMSD and density independently, then prints an overall convergence verdict.
+
+#### 4. Output
+
+Example output:
+
+```text
+--- RMSD ---
+file          : rmsd_npt.xvg
+tail fraction : 0.20
+mean (tail)   : 0.215342
+std  (tail)   : 0.012345
+slope (tail)  : 3.2e-05 per ps
+converged?    : YES (std <= 0.05, |slope| <= 0.0001)
+
+--- Density ---
+file          : density_npt.xvg
+tail fraction : 0.20
+mean (tail)   : 998.123456
+std  (tail)   : 2.345678
+slope (tail)  : -0.0034 per ps
+converged?    : YES (std <= 5.0, |slope| <= 0.01)
+
+Overall convergence: YES (RMSD and density tails are stable)
+```
+
+If either observable fails the thresholds, it will print `converged? : NO` for that series and:
+
+```text
+Overall convergence: NO (see details above)
+```
+
+
+#### 5. Customization
+
+Inside `check_convergence.sh`, in the embedded Python block, you can adjust:
+
+- `tail_frac` – to analyze a different fraction (e.g. last 10%: `0.10`).
+- Thresholds:
+    - `rmsd_std_th`, `rmsd_slope_th`
+    - `dens_std_th`, `dens_slope_th`
+
+You can also point the script to other XVG files by passing paths as the first and second arguments.
+
 
 
 ## 5. Typical usage
